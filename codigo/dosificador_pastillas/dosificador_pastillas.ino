@@ -1,9 +1,15 @@
 #include <WiFi.h>
 #include <time.h>
 #include <Adafruit_NeoPixel.h>
-#include "Ticker.h"
+#include <TickTwo.h>
 #include <Wire.h>
-#include "RTClib.h"
+#include <RTClib.h>
+#include <DNSServer.h>
+#include <WebServer.h>
+#include <HTTPclient.h>
+#include <Preferences.h>
+
+#include "functions.h"
 
 // ==================== DEFINICIONES ==================== //
 #define LED_PIN 17
@@ -27,13 +33,106 @@ RTC_DS3231 rtc;
 // Estado del botón/interrupción
 volatile bool intFlag = false;
 bool usarRTC = false;
-
+const char* AP_NAME = "Pastillero";
 // ==================== FUNCIONES ==================== //
 
 // Interrupción del botón
 void ButtonInterrupt() {
   intFlag = true;
 }
+
+// Declaración de todas las funciones
+void apagarTodosLosLEDs();
+void stopMelodia();
+void encenderLED(int pos);
+void encenderLED2(int pos);
+void encenderLED3(int pos);
+void melodia_GOT();
+void chequeo();
+
+// ==================== TICKER ==================== //
+TickTwo chequeohora(chequeo, 60000, 0, MILLIS);  // Cada 60 seg
+
+// ==================== SETUP ==================== //
+void setup() {
+  Serial.begin(115200);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(BUTTON, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(BUTTON), ButtonInterrupt, FALLING);
+
+  led.begin();
+  led2.begin();
+  led3.begin();
+  led.show();
+  led2.show();
+  led3.show();
+  apagarTodosLosLEDs();
+  
+  Wire.begin(21, 22);  // Pines I2C del ESP32
+
+  if (!rtc.begin()) {
+    Serial.println("No se encontró el RTC");
+  }
+
+  // ==================== Conexión WiFi ==================== //
+  /*
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando a WiFi");
+  */
+
+  WiFi_setup();
+
+  int intentos = 0;
+  while (WiFi.status() != WL_CONNECTED && intentos < 20) {
+    delay(500);
+    Serial.print(".");
+    intentos++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi conectado!");
+
+    // Configuración de zona horaria España
+    configTime(0, 0, "pool.ntp.org");
+    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
+    tzset();
+
+    struct tm tiempo;
+    while (!getLocalTime(&tiempo)) {
+      Serial.println("Sincronizando la hora...");
+      delay(1000);
+    }
+
+    // Guardar hora en RTC
+    rtc.adjust(DateTime(tiempo.tm_year + 1900, tiempo.tm_mon + 1, tiempo.tm_mday, tiempo.tm_hour, tiempo.tm_min, tiempo.tm_sec));
+    Serial.println("Hora actual guardada en RTC");
+    usarRTC = false;
+
+  } else {
+    Serial.println("\nNo se pudo conectar a WiFi. Usando hora del RTC.");
+    usarRTC = true;
+    DateTime now = rtc.now();
+    Serial.printf("Hora actual: %02d:%02d:%02d\n", now.hour(), now.minute(), now.second());
+    delay(1000);
+  }
+
+  // Iniciar el chequeo de hora
+  chequeohora.start();
+}
+
+// ==================== LOOP ==================== //
+void loop() {
+  if (intFlag) {
+    intFlag = false;
+    stopMelodia();
+  }
+
+  chequeohora.update();
+}
+
+
+// ================ Funciones ================== //
 
 void apagarTodosLosLEDs() {
   for (int i = 0; i < NUM_LEDS; i++) {
@@ -49,7 +148,7 @@ void apagarTodosLosLEDs() {
 // ==================== DETENER MELODÍA ==================== //
 void stopMelodia() {
   intFlag = false;
-  noTone(BUZZER);
+  noTone(BUZZER); // Detiene el PWM en ese pin.
   apagarTodosLosLEDs();
   Serial.println("Melodía interrumpida y LEDs apagados");
 }
@@ -139,7 +238,7 @@ void melodia_GOT() {
 }
 
 // ==================== CHEQUEO DE HORA ==================== //
-void chequeo() {
+void chequeo() { // Esto es lo que voy a tener que cambiar
   struct tm tiempo;
 
   if (usarRTC) {
@@ -156,7 +255,7 @@ void chequeo() {
   }
 
   // Evento 1
-  if (tiempo.tm_hour == 9 && tiempo.tm_min == 0) {
+  if (tiempo.tm_hour == 9  && tiempo.tm_min == 0) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED(pos);
     melodia_GOT();
@@ -177,81 +276,4 @@ void chequeo() {
     melodia_GOT();
     
   }
-}
-
-// ==================== TICKER ==================== //
-Ticker chequeohora(chequeo, 60000, 0, MILLIS);  // Cada 60 seg
-
-// ==================== SETUP ==================== //
-void setup() {
-  Serial.begin(115200);
-  pinMode(BUZZER, OUTPUT);
-  pinMode(BUTTON, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(BUTTON), ButtonInterrupt, FALLING);
-
-  led.begin();
-  led2.begin();
-  led3.begin();
-  led.show();
-  led2.show();
-  led3.show();
-  apagarTodosLosLEDs();
-
-  Wire.begin(21, 22);  // Pines I2C del ESP32
-
-  if (!rtc.begin()) {
-    Serial.println("No se encontró el RTC");
-  }
-
-  // ==================== Conexión WiFi ==================== //
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando a WiFi");
-
-  int intentos = 0;
-  while (WiFi.status() != WL_CONNECTED && intentos < 20) {
-    delay(500);
-    Serial.print(".");
-    intentos++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWiFi conectado!");
-
-    // Configuración de zona horaria España
-    configTime(0, 0, "pool.ntp.org");
-    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
-    tzset();
-
-    struct tm tiempo;
-    while (!getLocalTime(&tiempo)) {
-      Serial.println("Sincronizando la hora...");
-      delay(1000);
-    }
-
-    // Guardar hora en RTC
-    rtc.adjust(DateTime(tiempo.tm_year + 1900, tiempo.tm_mon + 1, tiempo.tm_mday, tiempo.tm_hour, tiempo.tm_min, tiempo.tm_sec));
-    Serial.println("Hora actual guardada en RTC");
-    usarRTC = false;
-
-  } else {
-    Serial.println("\nNo se pudo conectar a WiFi. Usando hora del RTC.");
-    usarRTC = true;
-    DateTime now = rtc.now();
-    Serial.printf("Hora actual: %02d:%02d:%02d\n", now.hour(), now.minute(), now.second());
-    delay(1000);
-  }
-
-  // Iniciar el chequeo de hora
-  chequeohora.start();
-}
-
-// ==================== LOOP ==================== //
-void loop() {
-  if (intFlag) {
-    intFlag = false;
-    stopMelodia();
-  }
-
-  chequeohora.update();
 }
