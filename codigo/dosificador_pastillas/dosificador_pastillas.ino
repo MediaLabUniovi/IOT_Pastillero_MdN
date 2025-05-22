@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <time.h>
 #include <Adafruit_NeoPixel.h>
-#include "Ticker.h"
+#include "TickTwo.h"
 #include <Wire.h>
 #include "RTClib.h"
 
@@ -180,7 +180,7 @@ void chequeo() {
 }
 
 // ==================== TICKER ==================== //
-Ticker chequeohora(chequeo, 60000, 0, MILLIS);  // Cada 60 seg
+TickTwo chequeohora(chequeo, 60000, 0, MILLIS);  // Cada 60 seg
 
 // ==================== SETUP ==================== //
 void setup() {
