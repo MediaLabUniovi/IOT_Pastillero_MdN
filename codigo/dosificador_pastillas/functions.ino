@@ -62,6 +62,8 @@ void server_config(){
     } else {
       hora_morning = -1;
       minuto_morning = -1;
+      localPref.remove("h_m");
+      localPref.remove("m_m");
     }
     if (ht >= 0 && mt >= 0) {
       hora_tarde = ht;
@@ -72,6 +74,8 @@ void server_config(){
     } else {
       hora_tarde = -1;
       minuto_tarde = -1;
+      localPref.remove("h_t");
+      localPref.remove("m_t");
     }
     if (hn >= 0 && mn >= 0) {
       hora_noche = hn;
@@ -82,6 +86,8 @@ void server_config(){
     } else {
       hora_noche = -1;
       minuto_noche = -1;
+      localPref.remove("h_n");
+      localPref.remove("m_n");
     }
 
     localPref.putBool("config_saved", configSaved);
@@ -91,7 +97,20 @@ void server_config(){
   });
 
   server.on("/confirmacion", HTTP_GET, []() {
-    server.send(200, "text/html", html_confirm);
+    Preferences localPref;
+    localPref.begin("Configuration", true);
+
+    int hm = localPref.getInt("h_m", -1);
+    int mm = localPref.getInt("m_m", -1);
+    int ht = localPref.getInt("h_t", -1);
+    int mt = localPref.getInt("m_t", -1);
+    int hn = localPref.getInt("h_n", -1);
+    int mn = localPref.getInt("m_n", -1);
+
+    localPref.end();
+
+    String html = generarConfirmacionHtml(hm, mm, ht, mt, hn, mn);
+    server.send(200, "text/html", html);
     config = false;
     apagarAP.start();
   });
@@ -108,6 +127,7 @@ void server_config(){
 //----------------------------------------------------
 
 // ==================== CONTROL DE LEDS ==================== //
+
 void modoConfig(){
   for (int i = 0; i <= 3; i++){
     encederTodosLosLEDs();
@@ -450,6 +470,7 @@ void encenderLED3(int pos) {
 }
 
 // ==================== MELODÍA ==================== //
+
 void stopMelodia() {
   intFlag = false;
   noTone(BUZZER); // Detiene el PWM en ese pin.
@@ -524,6 +545,7 @@ void melodia_GOT() {
 }
 
 // ==================== CHEQUEO DE HORA ==================== //
+
 void chequeo() { // Esto es lo que voy a tener que cambiar
   struct tm tiempo;
 
@@ -537,21 +559,16 @@ void chequeo() { // Esto es lo que voy a tener que cambiar
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED(pos);
     melodia_GOT();
-  }
-
-  // Evento 2
-  if (tiempo.tm_hour == hora_tarde && tiempo.tm_min == minuto_tarde) {
+  }else if (tiempo.tm_hour == hora_tarde && tiempo.tm_min == minuto_tarde) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED2(pos);
     melodia_GOT();
-  }
-
-  // Evento 3
-  if (tiempo.tm_hour == hora_noche && tiempo.tm_min == minuto_noche) {
+  }else if (tiempo.tm_hour == hora_noche && tiempo.tm_min == minuto_noche) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED3(pos);
     melodia_GOT();
-    
+  } else {
+    apagarTodosLosLEDs();
   }
 }
 
@@ -578,4 +595,103 @@ void peripherals_setup(){
     Serial.println("No se encontró el RTC");
     while(1);
   }
+}
+
+// ==================== Página confirmación ==================== //
+
+String formatHora(int h, int m) {
+  if (h < 0 || m < 0) return "--:--";
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%02d:%02d", h, m);
+  return String(buf);
+}
+
+String generarConfirmacionHtml(int hm, int mm, int ht, int mt, int hn, int mn) {
+  String html = R"rawliteral(
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Confirmación</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #f0f8f5;
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+
+      .card {
+        background-color: #ffffff;
+        padding: 30px 40px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        text-align: center;
+        animation: fadeIn 0.5s ease;
+        max-width: 90%;
+      }
+
+      h2 {
+        color: #2e7d32;
+        margin-bottom: 20px;
+        font-size: 1.5em;
+      }
+
+      p {
+        color: #333;
+        font-size: 1em;
+        margin: 6px 0;
+      }
+
+      .horas {
+        margin-top: 15px;
+        margin-bottom: 15px;
+        padding: 10px;
+        background-color: #e8f5e9;
+        border-radius: 10px;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (max-width: 480px) {
+        .card {
+          padding: 20px;
+        }
+
+        h2 {
+          font-size: 1.2em;
+        }
+
+        p {
+          font-size: 0.95em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>✅ Configuración enviada correctamente</h2>
+      <div class="horas">
+        <p><strong>Mañana:</strong> )rawliteral";
+
+    html += formatHora(hm, mm) + "</p>\n";
+    html += "<p><strong>Tarde:</strong> " + formatHora(ht, mt) + "</p>\n";
+    html += "<p><strong>Noche:</strong> " + formatHora(hn, mn) + "</p>\n";
+
+    html += R"rawliteral(
+      </div>
+      <p>Puedes cerrar esta ventana o desconectarte del dispositivo.</p>
+    </div>
+  </body>
+  </html>
+  )rawliteral";
+
+    return html;
 }

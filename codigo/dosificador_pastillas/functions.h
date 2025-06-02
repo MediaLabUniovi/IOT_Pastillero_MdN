@@ -17,5 +17,7 @@ void WiFi_ap_desconectar();
 void encederTodosLosLEDs();
 void modoConfig();
 void timeout_AP();
+String formatHora(int h, int m);
+String generarConfirmacionHtml(int hm, int mm, int ht, int mt, int hn, int mn);
 
 #endif
