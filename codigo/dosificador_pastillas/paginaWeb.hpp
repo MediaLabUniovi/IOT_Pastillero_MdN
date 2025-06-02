@@ -9,29 +9,125 @@ const char html_page[] PROGMEM = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <title>Configurar Horarios</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f4f8;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .bloque {
+      background-color: #fff;
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      width: 90%;
+      max-width: 400px;
+      box-sizing: border-box;
+    }
+
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+
+    .fila {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .fila select {
+      flex: 1;
+      padding: 6px;
+      font-size: 1em;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      margin-top: 25px;
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1em;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    #respuesta {
+      margin-top: 15px;
+      color: red;
+      text-align: center;
+    }
+
+    /* Responsivo */
+    @media (max-width: 480px) {
+      .fila {
+        flex-direction: column;
+      }
+
+      .fila select {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
-  <h2>Configura las horas</h2>
+  <div class="bloque">
+    <h2>Configura las horas</h2>
 
-  <label>Mañana:</label><br>
-  Hora: <select id="hora_m"></select>
-  Min: <select id="min_m"></select><br><br>
+    <label>Mañana:</label>
+    <div class="fila">
+      <select id="hora_m"></select>
+      <select id="min_m"></select>
+    </div>
 
-  <label>Tarde:</label><br>
-  Hora: <select id="hora_t"></select>
-  Min: <select id="min_t"></select><br><br>
+    <label>Tarde:</label>
+    <div class="fila">
+      <select id="hora_t"></select>
+      <select id="min_t"></select>
+    </div>
 
-  <label>Noche:</label><br>
-  Hora: <select id="hora_n"></select>
-  Min: <select id="min_n"></select><br><br>
+    <label>Noche:</label>
+    <div class="fila">
+      <select id="hora_n"></select>
+      <select id="min_n"></select>
+    </div>
 
-  <button onclick="enviarTodo()">Enviar configuración</button>
+    <button onclick="enviarTodo()">Enviar configuración</button>
 
-  <p id="respuesta"></p>
+    <p id="respuesta"></p>
+  </div>
 
   <script>
     function cargarOpciones(id, desde, hasta, paso) {
       const sel = document.getElementById(id);
+      const opcionVacia = document.createElement("option");
+      opcionVacia.value = "";
+      opcionVacia.text = "--";
+      sel.appendChild(opcionVacia);
+
       for (let i = desde; i <= hasta; i += paso) {
         const opt = document.createElement("option");
         opt.value = i;
@@ -40,13 +136,18 @@ const char html_page[] PROGMEM = R"rawliteral(
       }
     }
 
+    function obtenerValor(id) {
+      const val = document.getElementById(id).value;
+      return val === "" ? -1 : parseInt(val);
+    }
+
     function enviarTodo() {
-      const h_m = document.getElementById("hora_m").value;
-      const m_m = document.getElementById("min_m").value;
-      const h_t = document.getElementById("hora_t").value;
-      const m_t = document.getElementById("min_t").value;
-      const h_n = document.getElementById("hora_n").value;
-      const m_n = document.getElementById("min_n").value;
+      const h_m = obtenerValor("hora_m");
+      const m_m = obtenerValor("min_m");
+      const h_t = obtenerValor("hora_t");
+      const m_t = obtenerValor("min_t");
+      const h_n = obtenerValor("hora_n");
+      const m_n = obtenerValor("min_n");
 
       const ts = Math.floor(new Date().getTime() / 1000);
       const url = `/setConfig?hm=${h_m}&mm=${m_m}&ht=${h_t}&mt=${m_t}&hn=${h_n}&mn=${m_n}&ts=${ts}`;
@@ -54,7 +155,6 @@ const char html_page[] PROGMEM = R"rawliteral(
       fetch(url)
         .then(res => res.text())
         .then(data => {
-          // Redirigir a la página de confirmación
           window.location.href = "/confirmacion";
         })
         .catch(err => {
@@ -62,7 +162,6 @@ const char html_page[] PROGMEM = R"rawliteral(
         });
     }
 
-    // Cargar listas al iniciar
     const tramos = ["m", "t", "n"];
     tramos.forEach(sufijo => {
       cargarOpciones(`hora_${sufijo}`, 0, 23, 1);
@@ -79,10 +178,68 @@ const char html_confirm[] PROGMEM = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <title>Confirmación</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f0f8f5;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .card {
+      background-color: #ffffff;
+      padding: 30px 40px;
+      border-radius: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      text-align: center;
+      animation: fadeIn 0.5s ease;
+      max-width: 90%;
+    }
+
+    h2 {
+      color: #2e7d32;
+      margin-bottom: 20px;
+      font-size: 1.5em;
+    }
+
+    p {
+      color: #333;
+      font-size: 1em;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 20px;
+      }
+
+      h2 {
+        font-size: 1.2em;
+      }
+
+      p {
+        font-size: 0.95em;
+      }
+    }
+  </style>
 </head>
 <body>
-  <h2>✅ Configuración enviada correctamente</h2>
-  <p>Puedes cerrar esta ventana o desconectarte del dispositivo.</p>
+  <div class="card">
+    <h2>✅ Configuración enviada correctamente</h2>
+    <p>Puedes cerrar esta ventana o desconectarte del dispositivo.</p>
+  </div>
 </body>
 </html>
 )rawliteral";
+
+
+
+

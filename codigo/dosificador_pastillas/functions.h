@@ -16,5 +16,6 @@ void peripherals_setup();
 void WiFi_ap_desconectar();
 void encederTodosLosLEDs();
 void modoConfig();
+void timeout_AP();
 
 #endif

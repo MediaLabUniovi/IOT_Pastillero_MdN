@@ -7,7 +7,6 @@ void WiFi_setup(){
   WiFi.softAP(AP_NAME);
   Serial.println("Iniciando AP...");
   Serial.println("IP: " + WiFi.softAPIP().toString());
-
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer.setTTL(300);
   if (dnsServer.start(53, "*", WiFi.softAPIP())){
@@ -15,76 +14,93 @@ void WiFi_setup(){
   } else {
     Serial.println("Error: No se pudo iniciar el servidor DNS");
   }
+  server.begin();
 }
 
 void WiFi_ap_desconectar() {
   if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA){
-    dnsServer.stop();         // Detiene el servidor DNS
-    WiFi.softAPdisconnect(true);  // Apaga el Access Point y desconecta
+    Serial.println();
+    dnsServer.stop();
+    Serial.println(); 
+    server.stop();
+    Serial.println();         // Detiene el servidor DNS
+    WiFi.softAPdisconnect(true);
+    Serial.println();  // Apaga el Access Point y desconecta
     WiFi.mode(WIFI_OFF);      // Apaga completamente el WiFi
     Serial.println("AP y DNS desactivados.");
+    //server.close();
   }
 }
 
 void server_config(){
  // Página principal
+  // Redirige cualquier URL no registrada al portal
   server.on("/", HTTP_GET, []() {
     server.send(200, "text/html", html_page);
   });
 
   server.on("/setConfig", HTTP_GET, []() {
-    if (
-      server.hasArg("hm") && server.hasArg("mm") &&
-      server.hasArg("ht") && server.hasArg("mt") &&
-      server.hasArg("hn") && server.hasArg("mn") &&
-      server.hasArg("ts")
-    ) {
-      hora_morning = server.arg("hm").toInt();
-      minuto_morning  = server.arg("mm").toInt();
-      hora_tarde = server.arg("ht").toInt();
-      minuto_tarde  = server.arg("mt").toInt();
-      hora_noche = server.arg("hn").toInt();
-      minuto_noche  = server.arg("mn").toInt();
-  
-      time_t ts = (time_t)strtoll(server.arg("ts").c_str(), nullptr, 10);
-      struct tm *tm_info = localtime(&ts);
-  
-      Serial.println("Configuración recibida:");
-      Serial.printf("  Mañana: %02d:%02d\n", hora_morning, minuto_morning);
-      Serial.printf("  Tarde:  %02d:%02d\n", hora_tarde, minuto_tarde);
-      Serial.printf("  Noche:  %02d:%02d\n", hora_noche, minuto_noche);
-      Serial.printf("  Timestamp: %lld\n", (long long)ts);
-      Serial.printf("  Fecha: %02d-%02d-%04d %02d:%02d:%02d\n",
-        tm_info->tm_mday,
-        tm_info->tm_mon + 1,
-        tm_info->tm_year + 1900,
-        tm_info->tm_hour,
-        tm_info->tm_min,
-        tm_info->tm_sec);
+    Preferences localPref;
+    localPref.begin("Configuration", false);
 
-      rtc.adjust(DateTime(
-        tm_info->tm_year + 1900,
-        tm_info->tm_mon + 1,
-        tm_info->tm_mday,
-        tm_info->tm_hour,
-        tm_info->tm_min,
-        tm_info->tm_sec
-      ));
-      Serial.println("Hora actual guardada en RTC");
+    int hm = server.hasArg("hm") ? server.arg("hm").toInt() : -1;
+    int mm = server.hasArg("mm") ? server.arg("mm").toInt() : -1;
+    int ht = server.hasArg("ht") ? server.arg("ht").toInt() : -1;
+    int mt = server.hasArg("mt") ? server.arg("mt").toInt() : -1;
+    int hn = server.hasArg("hn") ? server.arg("hn").toInt() : -1;
+    int mn = server.hasArg("mn") ? server.arg("mn").toInt() : -1;
+    long long ts = server.hasArg("ts") ? strtoll(server.arg("ts").c_str(), nullptr, 10) : 0;
 
+    bool configSaved = false;
+
+    if (hm >= 0 && mm >= 0) {
+      hora_morning = hm;
+      minuto_morning = mm;
+      localPref.putInt("h_m", hm);
+      localPref.putInt("m_m", mm);
+      configSaved = true;
+    } else {
+      hora_morning = -1;
+      minuto_morning = -1;
     }
+    if (ht >= 0 && mt >= 0) {
+      hora_tarde = ht;
+      minuto_tarde = mt;
+      localPref.putInt("h_t", ht);
+      localPref.putInt("m_t", mt);
+      configSaved = true;
+    } else {
+      hora_tarde = -1;
+      minuto_tarde = -1;
+    }
+    if (hn >= 0 && mn >= 0) {
+      hora_noche = hn;
+      minuto_noche = mn;
+      localPref.putInt("h_n", hn);
+      localPref.putInt("m_n", mn);
+      configSaved = true;
+    } else {
+      hora_noche = -1;
+      minuto_noche = -1;
+    }
+
+    localPref.putBool("config_saved", configSaved);
+    localPref.end();
+    // Guarda la hora actual en el RTC como antes...
     server.send(200, "text/plain", "Configuración de horarios recibida correctamente");
   });
+
   server.on("/confirmacion", HTTP_GET, []() {
     server.send(200, "text/html", html_confirm);
     config = false;
     apagarAP.start();
   });
-  // Redirige cualquier URL no registrada al portal
+
   server.onNotFound([]() {
     server.send(200, "text/html", html_page);
   });
-  server.begin();
+
+  
 }
 
 //----------------------------------------------------
@@ -396,7 +412,6 @@ void animacionUltraLoca() {
   led.show(); led2.show(); led3.show();
 }
 
-
 void encederTodosLosLEDs(){
   for (int i = 0; i < NUM_LEDS; i++) {
     led.setPixelColor(i, 255, 0, 0);
@@ -436,6 +451,7 @@ void encenderLED3(int pos) {
 
 // ==================== MELODÍA ==================== //
 void stopMelodia() {
+  intFlag = false;
   noTone(BUZZER); // Detiene el PWM en ese pin.
   apagarTodosLosLEDs();
 }
@@ -458,7 +474,7 @@ bool playNote(int nota, int duracion) {
 
 void melodia_GOT() {
   Serial.println("Melodía GOT iniciada");
-
+  intFlag = false;
   for (int i = 0; i < 3; i++) {
     if (!playNote(294, 500)) return;
     if (!playNote(196, 500)) return;
