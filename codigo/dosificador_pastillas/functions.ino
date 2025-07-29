@@ -119,7 +119,6 @@ void server_config(){
     server.send(200, "text/html", html_page);
   });
 
-  
 }
 
 //----------------------------------------------------

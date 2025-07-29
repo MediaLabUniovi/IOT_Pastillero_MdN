@@ -18,8 +18,6 @@ void setup() {
     minuto_tarde    = pref.getInt("m_t", 0);
     hora_noche      = pref.getInt("h_n", 0);
     minuto_noche    = pref.getInt("m_n", 0);
-    Serial.println("Hora guardada");
-    Serial.println(hora_morning);
   } else {
     WiFi_setup();
     config = true;
