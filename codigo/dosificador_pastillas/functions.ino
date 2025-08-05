@@ -3,7 +3,7 @@
 // WiFi y portal cautivo
 //----------------------------------------------------
 void WiFi_setup(){
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_AP, PASSWORD);
   WiFi.softAP(AP_NAME);
   Serial.println("Iniciando AP...");
   Serial.println("IP: " + WiFi.softAPIP().toString());
@@ -585,10 +585,15 @@ void peripherals_setup(){
   attachInterrupt(digitalPinToInterrupt(BUTTON), ButtonInterrupt, FALLING);
 
   led.begin();
-  led2.begin();
-  led3.begin();
+  led.setBrightness(BRILLO);
   led.show();
+
+  led2.begin();
+  led2.setBrightness(BRILLO);
   led2.show();
+
+  led3.begin();
+  led3.setBrightness(BRILLO);
   led3.show();
   apagarTodosLosLEDs();
   

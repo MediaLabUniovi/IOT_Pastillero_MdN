@@ -39,10 +39,11 @@ void setup() {
       config = true;
       timeoutCP.start();
     }
-    chequeo_hora.update(); // Este se pone aquí para en caso de ser despertado por botón y que no se haga nada durante los 10 minutos de espera para dormir, pueda sonar la alarma.
     pref.end();
-  } 
-  t_pulsado = millis();
+  } else { // Cuando se despierta por botón
+    t_pulsado = millis();
+    chequeo_hora.start(); // Este se pone aquí para en caso de ser despertado por botón y que no se haga nada durante los 10 minutos de espera para dormir, pueda sonar la alarma.
+  }
 }
 
 void loop() { // Al loop solo voy a llegar si no me despierto por timer es decir: si es la primera vez que arranco o si quiero entrar en modo config.
