@@ -28,6 +28,7 @@ void WiFi_ap_desconectar() {
     Serial.println();  // Apaga el Access Point y desconecta
     WiFi.mode(WIFI_OFF);      // Apaga completamente el WiFi
     Serial.println("AP y DNS desactivados.");
+    dormir_tiempo(); // la pongo aquí para que de esta manera haya podido cerrar todos los demás procesos antes de dormirse
     //server.close();
   }
 }
@@ -113,6 +114,7 @@ void server_config(){
     server.send(200, "text/html", html);
     config = false;
     apagarAP.start();
+    apago_por_config = true;
   });
 
   server.onNotFound([]() {
@@ -495,64 +497,69 @@ bool playNote(int nota, int duracion) {
 void melodia_GOT() {
   Serial.println("Melodía GOT iniciada");
   intFlag = false;
-  for (int i = 0; i < 3; i++) {
-    if (!playNote(294, 500)) return;
-    if (!playNote(196, 500)) return;
-    if (!playNote(233, 250)) return;
-    if (!playNote(262, 250)) return;
-  }
+  int times = 0;
+  while (!intFlag && times != 5){ // Este intFlag aquí hace que se repita continuamente la canción hasta que se pulse el botón maximo 5 veces.
+    for (int i = 0; i < 3; i++) {
+      if (!playNote(294, 500)) return;
+      if (!playNote(196, 500)) return;
+      if (!playNote(233, 250)) return;
+      if (!playNote(262, 250)) return;
+    }
 
-  if (!playNote(294, 1500)) return;
-  if (!playNote(349, 1500)) return;
-  if (!playNote(233, 1000)) return;
-  if (!playNote(311, 250)) return;
-  if (!playNote(294, 250)) return;
-  if (!playNote(349, 1000)) return;
-  if (!playNote(233, 1000)) return;
-  if (!playNote(311, 250)) return;
-  if (!playNote(294, 250)) return;
-  if (!playNote(262, 500)) return;
-
-  for (int i = 0; i < 3; i++) {
-    if (!playNote(208, 250)) return;
-    if (!playNote(233, 250)) return;
+    if (!playNote(294, 1500)) return;
+    if (!playNote(349, 1500)) return;
+    if (!playNote(233, 1000)) return;
+    if (!playNote(311, 250)) return;
+    if (!playNote(294, 250)) return;
+    if (!playNote(349, 1000)) return;
+    if (!playNote(233, 1000)) return;
+    if (!playNote(311, 250)) return;
+    if (!playNote(294, 250)) return;
     if (!playNote(262, 500)) return;
-    if (!playNote(175, 500)) return;
-  }
 
-  if (!playNote(392, 1000)) return;
-  if (!playNote(262, 1000)) return;
-  if (!playNote(311, 250)) return;
-  if (!playNote(349, 250)) return;
+    for (int i = 0; i < 3; i++) {
+      if (!playNote(208, 250)) return;
+      if (!playNote(233, 250)) return;
+      if (!playNote(262, 500)) return;
+      if (!playNote(175, 500)) return;
+    }
 
-  if (!playNote(392, 1000)) return;
-  if (!playNote(262, 1000)) return;
-  if (!playNote(311, 250)) return;
-  if (!playNote(349, 250)) return;
+    if (!playNote(392, 1000)) return;
+    if (!playNote(262, 1000)) return;
+    if (!playNote(311, 250)) return;
+    if (!playNote(349, 250)) return;
 
-  if (!playNote(294, 500)) return;
+    if (!playNote(392, 1000)) return;
+    if (!playNote(262, 1000)) return;
+    if (!playNote(311, 250)) return;
+    if (!playNote(349, 250)) return;
 
-  for (int i = 0; i < 4; i++) {
-    if (!playNote(196, 500)) return;
-    if (!playNote(233, 250)) return;
-    if (!playNote(262, 250)) return;
     if (!playNote(294, 500)) return;
-  }
 
+    for (int i = 0; i < 4; i++) {
+      if (!playNote(196, 500)) return;
+      if (!playNote(233, 250)) return;
+      if (!playNote(262, 250)) return;
+      if (!playNote(294, 500)) return;
+    }
+    times++;
+  }
   noTone(BUZZER);  // Asegura que se apaga el buzzer al final
   Serial.println("Melodía GOT finalizada");
 }
 
 // ==================== CHEQUEO DE HORA ==================== //
 
-void chequeo() { // Esto es lo que voy a tener que cambiar
+void chequeo() {
   struct tm tiempo;
 
     DateTime now = rtc.now();
     tiempo.tm_hour = now.hour();
     tiempo.tm_min = now.minute();
     tiempo.tm_wday = now.dayOfTheWeek();
-
+    Serial.print(tiempo.tm_hour);
+    Serial.print(" ");
+    Serial.println(tiempo.tm_min);
   // Evento 1
   if (tiempo.tm_hour == hora_morning  && tiempo.tm_min == minuto_morning) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
@@ -693,4 +700,72 @@ String generarConfirmacionHtml(int hm, int mm, int ht, int mt, int hn, int mn) {
   )rawliteral";
 
     return html;
+}
+
+// ==================== DORMIR =======================//
+void print_wakeup_reason() {
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch (wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_EXT0:     Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1:     Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER:    Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD: Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP:      Serial.println("Wakeup caused by ULP program"); break;
+    default:                        Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason); break;
+  }
+}
+
+void entrar_en_suspension(unsigned long tiempo_en_segundos) {
+  pref.end();
+
+  esp_sleep_enable_timer_wakeup(tiempo_en_segundos * uS_TO_S_FACTOR);
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, 0);  // Wakeup si se pone LOW
+
+  // Configurar GPIO26 como entrada RTC con pull-up
+  rtc_gpio_init(GPIO_NUM_26);
+  rtc_gpio_set_direction(GPIO_NUM_26, RTC_GPIO_MODE_INPUT_ONLY);
+  rtc_gpio_pullup_en(GPIO_NUM_26);
+  rtc_gpio_pulldown_dis(GPIO_NUM_26);
+  rtc_gpio_hold_en(GPIO_NUM_26);
+
+  esp_deep_sleep_start();
+}
+
+void dormir_tiempo(){ // Función que calcula el tiempo de la siguiente alarma y duerme el micro.
+  pref.begin("Configuration",true);
+  unsigned long hora_mañana = pref.getInt("h_m", 0)*3600 + pref.getInt("m_m", 0)*60;
+  unsigned long hora_tarde = pref.getInt("h_t", 0)*3600 + pref.getInt("m_t", 0)*60;
+  unsigned long hora_noche = pref.getInt("h_n", 0)*3600 + pref.getInt("m_n", 0)*60;
+  Serial.printf("Hora mañana: %d\n", hora_mañana);
+  // Saca la hora actual para poder compararla
+  DateTime now = rtc.now();
+  unsigned long hora_ahora = now.hour()*3600 + now.minute()*60 + now.second();
+  if (hora_ahora < hora_mañana){ // Calcula el intervalo hasta la siguiente alarma y duerme el micro
+    Serial.println("Mañana");
+    Serial.printf("Hora ahora: %d\n", hora_ahora);
+    unsigned long tiempo_a_dormir = hora_mañana - hora_ahora;
+    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
+    entrar_en_suspension(tiempo_a_dormir);
+  } else if (hora_ahora < hora_tarde){
+    Serial.println("Tarde");
+    Serial.printf("Hora ahora: %d\n", hora_ahora);
+    unsigned long tiempo_a_dormir = hora_tarde - hora_ahora;
+    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
+    entrar_en_suspension(tiempo_a_dormir);
+  } else if (hora_ahora < hora_noche){
+    Serial.println("Noche");
+    Serial.printf("Hora ahora: %d\n", hora_ahora);
+    unsigned long tiempo_a_dormir = hora_noche - hora_ahora;
+    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
+    entrar_en_suspension(tiempo_a_dormir);
+  } else { // 86400 es 24h en minutos. Se calcula primero el tiempo que queda hasta las 24 horas y luego el tiempo hasta la primera alarma en segundos.
+    Serial.println("Else");
+    Serial.printf("Hora ahora: %d\n", hora_ahora);
+    unsigned long tiempo_a_dormir = (86400 - hora_ahora) + hora_mañana;
+    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
+    entrar_en_suspension(tiempo_a_dormir);
+  }
 }
