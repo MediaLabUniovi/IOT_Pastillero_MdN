@@ -37,11 +37,13 @@ const char* PASSWORD = "loripastis";
 #define BUZZER 5
 #define BUTTON 26
 
+#define uS_TO_S_FACTOR 1000000ULL
+
 Adafruit_NeoPixel led = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel led2 = Adafruit_NeoPixel(NUM_LEDS, LED_PIN2, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel led3 = Adafruit_NeoPixel(NUM_LEDS, LED_PIN3, NEO_GRB + NEO_KHZ800);
 
-TickTwo chequeohora(chequeo, 60000, 0, MILLIS);  // Cada 60 segundos
+TickTwo chequeo_hora(chequeo, 60000, 0, MILLIS);  // Cada 60 segundos
 TickTwo apagarAP(WiFi_ap_desconectar, 5000, 1, MILLIS); // 5 segundos
 TickTwo timeoutCP(WiFi_ap_desconectar, 600000 , 1, MILLIS); // 10 mins 600000
 
@@ -55,8 +57,11 @@ volatile bool intFlag = false;
 volatile bool config = false; // En el restart empezamos en modo configuración
 volatile bool botonDetectado = false;
 unsigned long t_pulsado = 0;
+unsigned long timer = 0;
 
-int hora_morning = 8;
+bool apago_por_config = false;
+
+int hora_morning = 9;
 int minuto_morning = 0;
 
 int hora_tarde = 14;
