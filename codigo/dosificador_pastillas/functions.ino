@@ -3,8 +3,8 @@
 // WiFi y portal cautivo
 //----------------------------------------------------
 void WiFi_setup(){
-  WiFi.mode(WIFI_AP, PASSWORD);
-  WiFi.softAP(AP_NAME);
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_NAME, PASSWORD);
   Serial.println("Iniciando AP...");
   Serial.println("IP: " + WiFi.softAPIP().toString());
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
@@ -93,6 +93,13 @@ void server_config(){
 
     localPref.putBool("config_saved", configSaved);
     localPref.end();
+    // --- AJUSTE DEL RTC CON LA MARCA DE TIEMPO DEL PORTAL ---
+    if (ts > 0) {
+    // ts viene del navegador como UNIX epoch en segundos (UTC)
+    rtc.adjust(DateTime((uint32_t)ts));
+    Serial.printf("RTC ajustado con epoch: %llu\n", ts);
+}
+// ---------------------------------------------------------
     // Guarda la hora actual en el RTC como antes...
     server.send(200, "text/plain", "Configuración de horarios recibida correctamente");
   });
