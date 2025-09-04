@@ -558,25 +558,22 @@ void melodia_GOT() {
 // ==================== CHEQUEO DE HORA ==================== //
 
 void chequeo() {
+  DateTime now = rtc.now();        // UTC
+  time_t rawtime = now.unixtime(); 
   struct tm tiempo;
+  localtime_r(&rawtime, &tiempo);  // Convierte a hora local con TZ
 
-    DateTime now = rtc.now();
-    tiempo.tm_hour = now.hour();
-    tiempo.tm_min = now.minute();
-    tiempo.tm_wday = now.dayOfTheWeek();
-    Serial.print(tiempo.tm_hour);
-    Serial.print(" ");
-    Serial.println(tiempo.tm_min);
-  // Evento 1
-  if (tiempo.tm_hour == hora_morning  && tiempo.tm_min == minuto_morning) {
+  Serial.printf("Hora local chequeo: %02d:%02d\n", tiempo.tm_hour, tiempo.tm_min);
+
+  if (tiempo.tm_hour == hora_morning && tiempo.tm_min == minuto_morning) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED(pos);
     melodia_GOT();
-  }else if (tiempo.tm_hour == hora_tarde && tiempo.tm_min == minuto_tarde) {
+  } else if (tiempo.tm_hour == hora_tarde && tiempo.tm_min == minuto_tarde) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED2(pos);
     melodia_GOT();
-  }else if (tiempo.tm_hour == hora_noche && tiempo.tm_min == minuto_noche) {
+  } else if (tiempo.tm_hour == hora_noche && tiempo.tm_min == minuto_noche) {
     int pos = (tiempo.tm_wday == 0) ? 6 : (tiempo.tm_wday - 1);
     encenderLED3(pos);
     melodia_GOT();
@@ -746,38 +743,62 @@ void entrar_en_suspension(unsigned long tiempo_en_segundos) {
   esp_deep_sleep_start();
 }
 
-void dormir_tiempo(){ // Función que calcula el tiempo de la siguiente alarma y duerme el micro.
-  pref.begin("Configuration",true);
-  unsigned long hora_mañana = pref.getInt("h_m", 0)*3600 + pref.getInt("m_m", 0)*60;
-  unsigned long hora_tarde = pref.getInt("h_t", 0)*3600 + pref.getInt("m_t", 0)*60;
-  unsigned long hora_noche = pref.getInt("h_n", 0)*3600 + pref.getInt("m_n", 0)*60;
-  Serial.printf("Hora mañana: %d\n", hora_mañana);
-  // Saca la hora actual para poder compararla
-  DateTime now = rtc.now();
-  unsigned long hora_ahora = now.hour()*3600 + now.minute()*60 + now.second();
-  if (hora_ahora < hora_mañana){ // Calcula el intervalo hasta la siguiente alarma y duerme el micro
-    Serial.println("Mañana");
-    Serial.printf("Hora ahora: %d\n", hora_ahora);
-    unsigned long tiempo_a_dormir = hora_mañana - hora_ahora;
-    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
-    entrar_en_suspension(tiempo_a_dormir);
-  } else if (hora_ahora < hora_tarde){
-    Serial.println("Tarde");
-    Serial.printf("Hora ahora: %d\n", hora_ahora);
-    unsigned long tiempo_a_dormir = hora_tarde - hora_ahora;
-    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
-    entrar_en_suspension(tiempo_a_dormir);
-  } else if (hora_ahora < hora_noche){
-    Serial.println("Noche");
-    Serial.printf("Hora ahora: %d\n", hora_ahora);
-    unsigned long tiempo_a_dormir = hora_noche - hora_ahora;
-    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
-    entrar_en_suspension(tiempo_a_dormir);
-  } else { // 86400 es 24h en minutos. Se calcula primero el tiempo que queda hasta las 24 horas y luego el tiempo hasta la primera alarma en segundos.
-    Serial.println("Else");
-    Serial.printf("Hora ahora: %d\n", hora_ahora);
-    unsigned long tiempo_a_dormir = (86400 - hora_ahora) + hora_mañana;
-    Serial.printf("Me duermo por %d segundos\n",tiempo_a_dormir);
-    entrar_en_suspension(tiempo_a_dormir);
+void dormir_tiempo() {
+  pref.begin("Configuration", true);
+
+  // Cargar alarmas desde NVS
+  int h_m = pref.getInt("h_m", -1);
+  int m_m = pref.getInt("m_m", -1);
+  int h_t = pref.getInt("h_t", -1);
+  int m_t = pref.getInt("m_t", -1);
+  int h_n = pref.getInt("h_n", -1);
+  int m_n = pref.getInt("m_n", -1);
+
+  pref.end();
+
+  // Pasar RTC a hora local
+  DateTime now = rtc.now();        // UTC
+  time_t rawtime = now.unixtime();
+  struct tm localTime;
+  localtime_r(&rawtime, &localTime);
+
+  unsigned long hora_ahora = localTime.tm_hour * 3600 +
+                             localTime.tm_min * 60 +
+                             localTime.tm_sec;
+
+  Serial.printf("Hora local actual: %02d:%02d:%02d -> %lu seg\n",
+                localTime.tm_hour, localTime.tm_min, localTime.tm_sec, hora_ahora);
+
+  // Construir lista de alarmas válidas en segundos del día
+  std::vector<unsigned long> alarmas;
+
+  if (h_m >= 0 && m_m >= 0) alarmas.push_back(h_m * 3600 + m_m * 60);
+  if (h_t >= 0 && m_t >= 0) alarmas.push_back(h_t * 3600 + m_t * 60);
+  if (h_n >= 0 && m_n >= 0) alarmas.push_back(h_n * 3600 + m_n * 60);
+
+  if (alarmas.empty()) {
+    Serial.println("⚠️ No hay alarmas configuradas, no duermo.");
+    return;
   }
+
+  // Buscar la siguiente alarma después de ahora
+  unsigned long tiempo_a_dormir = 0;
+  bool encontrada = false;
+
+  for (unsigned long alarma : alarmas) {
+    if (hora_ahora < alarma) {
+      tiempo_a_dormir = alarma - hora_ahora;
+      encontrada = true;
+      break;
+    }
+  }
+
+  // Si ninguna alarma es hoy, dormir hasta la primera de mañana
+  if (!encontrada) {
+    tiempo_a_dormir = (86400 - hora_ahora) + alarmas[0];
+  }
+
+  Serial.printf("Me duermo por %lu segundos\n", tiempo_a_dormir);
+  entrar_en_suspension(tiempo_a_dormir);
 }
+
